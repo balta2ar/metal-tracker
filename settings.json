@@ -17,7 +17,7 @@
     "dht-enabled": true,
     "download-dir": "/mnt/data/music/metal-tracker/downloaded",
     "download-queue-enabled": true,
-    "download-queue-size": 30,
+    "download-queue-size": 5,
     "encryption": 1,
     "filter-mode": "show-all",
     "filter-trackers": "",
