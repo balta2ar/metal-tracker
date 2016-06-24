@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import re
 import sys
 import netrc
 from datetime import datetime
@@ -104,6 +105,7 @@ class Storage(object):
 class Feed(object):
     def __init__(self, filename):
         self._filename = filename
+        self._summary = {}
 
     def read(self):
         feed = feedparser.parse(self._filename)
@@ -118,6 +120,7 @@ class Feed(object):
             timestamp = datetime.strptime(published, TIMESTAMP_FORMAT)
             timestamp = pd.to_datetime(timestamp).tz_convert(None)
             summary = html2text.html2text(entry['summary'])
+            self._summary[title] = summary
 
             items.append({'timestamp': timestamp,
                           'title': title,
@@ -143,11 +146,17 @@ class Downloader(Session):
 
 
 class MetalTracker(object):
-    def __init__(self, db_filename, feed_filename, torrent_directory, downloader):
+    def __init__(self,
+                 db_filename, feed_filename, torrent_directory,
+                 blacklist_filename, downloader):
         self._db_filename = db_filename
         self._feed_filename = feed_filename
         self._torrent_directory = torrent_directory
         self._downloader = downloader
+
+        with open(blacklist_filename) as file_object:
+            self._blacklist_pattern = file_object.read().strip()
+            self._blacklist_regexp = re.compile(self._blacklist_pattern, re.IGNORECASE)
 
     def download(self):
         feed = Feed(self._feed_filename)
@@ -155,11 +164,44 @@ class MetalTracker(object):
 
         db = Storage(self._db_filename)
         new_items = db.get_new_items(feed_items)
-        downloaded_items = self._download_new_items(new_items)
 
+        if len(new_items):
+            print('Blacklist pattern: %s' % self._blacklist_pattern)
+            print('Filtering new items (%d)' % len(new_items))
+
+        def blacklist_matcher(row):
+            summary = feed._summary.get(row.title, '')
+            return self._blacklist_regexp.search(summary) is not None
+
+        mask = new_items.apply(blacklist_matcher, axis=1)
+        whitelisted = new_items[~mask]
+        blacklisted = new_items[mask]
+
+        self._print_items('kept (whitelisted)', feed, whitelisted)
+        self._print_items('filtered out (blacklisted)', feed, blacklisted)
+
+        if len(whitelisted):
+            print('Downloading new items (%d)' % len(whitelisted))
+
+        downloaded_items = self._download_new_items(whitelisted)
         if len(downloaded_items):
             db.append_items(downloaded_items)
+            print('-' * 50)
             print(downloaded_items)
+
+    def _print_items(self, message, feed, items):
+        if len(items) == 0:
+            return
+
+        print('-' * 50)
+        print('The following entries were %s' % message)
+        print('-' * 50)
+        for index, row in items.iterrows():
+            summary = feed._summary.get(row.title, '')
+            print(row.title)
+            print(row.page_url)
+            print(summary)
+            print('-' * 50)
 
     def _download_new_items(self, new_items):
         downloaded_items = pd.DataFrame(columns=new_items.columns)
@@ -201,8 +243,8 @@ class MetalTracker(object):
 
 
 def main(args):
-    if len(args) != 3:
-        print('usage: metal-tracker.py <db_filename> <feed_filename> <output_dir>')
+    if len(args) != 4:
+        print('usage: metal-tracker.py <db_filename> <feed_filename> <output_dir> <blacklist_filename>')
         exit(1)
 
     pd.set_option("display.max_columns", 999)
@@ -211,8 +253,9 @@ def main(args):
     pd.set_option('display.max_colwidth', 999)
     pd.set_option('display.width', None)
 
-    db_filename, feed_filename, torrent_directory = args
-    tracker = MetalTracker(db_filename, feed_filename, torrent_directory,
+    db_filename, feed_filename, torrent_directory, blacklist_filename = args
+    tracker = MetalTracker(db_filename, feed_filename,
+                           torrent_directory, blacklist_filename,
                            Downloader())
     tracker.download()
 
