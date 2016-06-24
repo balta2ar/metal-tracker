@@ -205,14 +205,13 @@ def main(args):
         print('usage: metal-tracker.py <db_filename> <feed_filename> <output_dir>')
         exit(1)
 
-    db_filename, feed_filename, torrent_directory = args
-
     pd.set_option("display.max_columns", 999)
     pd.set_option("display.max_rows", 999)
     pd.set_option('display.max_columns', 999)
     pd.set_option('display.max_colwidth', 999)
     pd.set_option('display.width', None)
 
+    db_filename, feed_filename, torrent_directory = args
     tracker = MetalTracker(db_filename, feed_filename, torrent_directory,
                            Downloader())
     tracker.download()
