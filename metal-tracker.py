@@ -3,6 +3,7 @@
 import re
 import sys
 import netrc
+import logging
 from datetime import datetime
 from shutil import copy2
 from os.path import join
@@ -15,6 +16,11 @@ import feedparser
 import html2text
 import pandas as pd
 
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+logging.getLogger("requests").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 NETRC_HOST = 'metal-tracker'
 LOGIN_URL = 'http://en.metal-tracker.com/user/login.html'
@@ -22,6 +28,8 @@ LOGIN_URL = 'http://en.metal-tracker.com/user/login.html'
 # DB_FILENAME = 'metal-tracker.csv'
 # TORRENT_DIRECTORY = '.'
 BITTORRENT_CONTENT_TYPE = 'application/x-bittorrent'
+LOG_FILENAME = 'metal-tracker.log'
+LOG_FORMAT = '%(asctime)s %(module)s %(process)d %(levelname)s %(message)s'
 
 # http://en.metal-tracker.com/torrents/178698.html
 #PAGE_URL = 'http://en.metal-tracker.com/torrents/download/id/178698.html'
@@ -166,8 +174,8 @@ class MetalTracker(object):
         new_items = db.get_new_items(feed_items)
 
         if len(new_items):
-            print('Blacklist pattern: %s' % self._blacklist_pattern)
-            print('Filtering new items (%d)' % len(new_items))
+            logger.info('Blacklist pattern: %s' % self._blacklist_pattern)
+            logger.info('Filtering new items (%d)' % len(new_items))
 
         def blacklist_matcher(row):
             summary = feed._summary.get(row.title, '')
@@ -181,27 +189,27 @@ class MetalTracker(object):
         self._print_items('filtered out (blacklisted)', feed, blacklisted)
 
         if len(whitelisted):
-            print('Downloading new items (%d)' % len(whitelisted))
+            logger.info('Downloading new items (%d)' % len(whitelisted))
 
         downloaded_items = self._download_new_items(whitelisted)
         if len(downloaded_items):
             db.append_items(downloaded_items)
-            print('-' * 50)
-            print(downloaded_items)
+            logger.info('-' * 50)
+            logger.info(downloaded_items)
 
     def _print_items(self, message, feed, items):
         if len(items) == 0:
             return
 
-        print('-' * 50)
-        print('The following entries were %s' % message)
-        print('-' * 50)
+        logger.info('-' * 50)
+        logger.info('The following entries were %s' % message)
+        logger.info('-' * 50)
         for index, row in items.iterrows():
             summary = feed._summary.get(row.title, '')
-            print(row.title)
-            print(row.page_url)
-            print(summary)
-            print('-' * 50)
+            logger.info(row.title)
+            logger.info(row.page_url)
+            logger.info(summary)
+            logger.info('-' * 50)
 
     def _download_new_items(self, new_items):
         downloaded_items = pd.DataFrame(columns=new_items.columns)
@@ -224,27 +232,47 @@ class MetalTracker(object):
         return torrent_url
 
     def _download_torrent(self, torrent_url, title, destination_dir):
-        print('Getting "%s" (%s)' % (title, torrent_url))
+        logger.info('Getting "%s" (%s)' % (title, torrent_url))
         page = self._downloader.get(torrent_url)
         if page.status_code != 200:
-            print('Failure: %s %s' % (page.status_code, page.reason))
+            logger.error('Failure: %s %s' % (page.status_code, page.reason))
             return False
 
         content_type = page.headers.get('Content-Type')
         if content_type != BITTORRENT_CONTENT_TYPE:
-            print('Torrent is not ready yet: %s (%d)' % (content_type, len(page.content)))
+            logger.warning('Torrent is not ready yet: %s (%d)' % (content_type, len(page.content)))
             return False
 
+        title = title.replace('/', '')
         filename = join(destination_dir, title) + '.torrent'
         with open(filename, 'wb') as file_object:
             file_object.write(page.content)
-        print('Saved %s to %s' % (title, filename))
+        logger.info('Saved %s to %s' % (title, filename))
         return True
 
 
+def init_logging():
+    fh = logging.FileHandler(LOG_FILENAME)
+    fh.setLevel(logging.DEBUG)
+
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+
+    formatter = logging.Formatter(LOG_FORMAT)
+    ch.setFormatter(formatter)
+    fh.setFormatter(formatter)
+
+    logger.addHandler(ch)
+    logger.addHandler(fh)
+
+
+
+
 def main(args):
+    init_logging()
+
     if len(args) != 4:
-        print('usage: metal-tracker.py <db_filename> <feed_filename> <output_dir> <blacklist_filename>')
+        logger.error('usage: metal-tracker.py <db_filename> <feed_filename> <output_dir> <blacklist_filename>')
         exit(1)
 
     pd.set_option("display.max_columns", 999)
