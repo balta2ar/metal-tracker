@@ -1,1 +1,1 @@
-style:.*(brutal metal|\*\*death metal|\*\*thrash metal)
+style:.*(brutal metal|\*\*death metal|\*\*thrash metal|goregrind)

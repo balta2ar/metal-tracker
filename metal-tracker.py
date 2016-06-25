@@ -247,7 +247,7 @@ class MetalTracker(object):
         filename = join(destination_dir, title) + '.torrent'
         with open(filename, 'wb') as file_object:
             file_object.write(page.content)
-        logger.info('Saved %s to %s' % (title, filename))
+        logger.info('Saved "%s" to %s' % (title, filename))
         return True
 
 
