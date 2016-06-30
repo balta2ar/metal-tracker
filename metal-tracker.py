@@ -185,31 +185,49 @@ class MetalTracker(object):
         whitelisted = new_items[~mask]
         blacklisted = new_items[mask]
 
-        self._print_items('kept (whitelisted)', feed, whitelisted)
-        self._print_items('filtered out (blacklisted)', feed, blacklisted)
+        self._print_summary(feed, whitelisted, blacklisted)
 
         if len(whitelisted):
             logger.info('Downloading new items (%d)' % len(whitelisted))
 
+        return
         downloaded_items = self._download_new_items(whitelisted)
         if len(downloaded_items):
             db.append_items(downloaded_items)
             logger.info('-' * 50)
             logger.info(downloaded_items)
 
-    def _print_items(self, message, feed, items):
+    def _print_summary(self, feed, whitelisted, blacklisted):
+        self._print_items('kept (whitelisted)', feed, whitelisted, preview=True)
+        self._print_items('filtered out (blacklisted)', feed, blacklisted, preview=True)
+
+        self._print_items('kept (whitelisted)', feed, whitelisted)
+        self._print_items('filtered out (blacklisted)', feed, blacklisted)
+
+    def _print_items(self, message, feed, items, preview=False):
         if len(items) == 0:
             return
 
         logger.info('-' * 50)
-        logger.info('The following entries were %s' % message)
+        logger.info('The following entries were %s (%d)' % (message, len(items)))
         logger.info('-' * 50)
         for index, row in items.iterrows():
             summary = feed._summary.get(row.title, '')
-            logger.info(row.title)
-            logger.info(row.page_url)
-            logger.info(summary)
-            logger.info('-' * 50)
+            style = self._get_style_from_summary(summary)
+            logger.info('%s / %s', row.title, style)
+            if not preview:
+                logger.info(row.page_url)
+                logger.info(summary)
+                logger.info('-' * 50)
+
+    def _get_style_from_summary(self, summary):
+        for line in summary.split('\n'):
+            if 'style:' in line.lower():
+                style = line.replace('*', '').strip()
+                style = style[style.lower().find('style:')+6:]
+                return style.strip()
+
+        return '<unknown>'
 
     def _download_new_items(self, new_items):
         downloaded_items = pd.DataFrame(columns=new_items.columns)
