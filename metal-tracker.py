@@ -163,7 +163,7 @@ class MetalTracker(object):
         self._downloader = downloader
 
         with open(blacklist_filename) as file_object:
-            self._blacklist_pattern = file_object.read().strip()
+            self._blacklist_pattern = file_object.read().strip().replace('\n', '')
             self._blacklist_regexp = re.compile(self._blacklist_pattern, re.IGNORECASE)
 
     def download(self):
@@ -190,7 +190,6 @@ class MetalTracker(object):
         if len(whitelisted):
             logger.info('Downloading new items (%d)' % len(whitelisted))
 
-        return
         downloaded_items = self._download_new_items(whitelisted)
         if len(downloaded_items):
             db.append_items(downloaded_items)
